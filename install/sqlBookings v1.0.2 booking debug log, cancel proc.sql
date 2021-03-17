@@ -396,6 +396,49 @@ end
 
 GO
 
+ALTER proc [dbo].[set_ticket](
+	@booking int, @case_ref nvarchar(50), 
+	@ticket_number int=null, 
+	@ticket_name nvarchar(500),
+	@ticket_notes nvarchar(500),
+	@text1 nvarchar(500)='',
+	@text2 nvarchar(500)='',
+	@text3 nvarchar(500)='',
+	@text4 nvarchar(500)='')
+as
+begin
+	--create or update a ticket for the specified booking. 
+	--will error if booking does not exist 
+	--if ticket_number is blank it will assign the next number, unless there are already tickets set that match the booking.ticket_count
+	--only works for confirmed bookings
+
+	--calculate next ticket number if not passed in
+	if @ticket_number is null
+	begin
+		select @ticket_number=count(*)+1 from ticket inner join booking on ticket.booking_id=booking.id where booking.id=@booking and case_ref=@case_ref
+	end
+
+	--check booking exists and has suitable ticket count
+	declare @maxt int
+	select @maxt=ticket_count from booking where id=@booking and case_ref=@case_ref and expiry_date is null
+	if @maxt is not null and @maxt>=@ticket_number
+	begin
+		-- insert/update the ticket
+		if not exists(select 0 from ticket where booking_id=@booking and ticket_number=@ticket_number)
+		begin
+			insert into ticket(booking_id, ticket_number) values (@booking, @ticket_number)
+		end
+		update ticket set 
+			ticket_name=@ticket_name, ticket_notes=@ticket_notes, 
+			ticket_text1=@text1, ticket_text2=@text2, ticket_text3=@text3, ticket_text4=@text4
+			where booking_id=@booking and ticket_number=@ticket_number	
+		select 'ok' as ticketresult
+	end
+	else
+	begin
+		select 'fail' as setticketresult
+	end
+
 /* record successful upgrade here */
 insert into upgrade_log(version, features, applied) values ('1.0.2','Booking debug log, cancel proc',getdate())
 go
